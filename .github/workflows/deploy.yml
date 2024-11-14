@@ -1,0 +1,66 @@
+name: Deploy to ECR
+
+on:
+ 
+  push:
+    branches: [ master ]
+
+env:
+  ECR_REPOSITORY: node-app
+  EKS_CLUSTER_NAME: demo
+  AWS_REGION: us-east-1
+
+jobs:
+  
+  build:
+    
+    name: Deployment
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Set short git commit SHA
+      id: commit
+      uses: prompt/actions-commit-hash@v3
+
+    - name: Check out code
+      uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{env.AWS_REGION}}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}        
+        IMAGE_TAG: ${{ steps.commit.outputs.short }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f docker/Dockerfile .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Replace placeholders in deployment YAML
+      run: |
+        sed -i "s|{{AWS_ACCOUNT_NUMBER}}|${{ secrets.AWS_ACCOUNT_NUMBER }}|g" ../../eks/02_deployment.yaml
+        sed -i "s|{{DOCKER_IMAGE}}|${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.commit.outputs.short }}|g" ../../eks/02_deployment.yaml
+      
+    - name: Update kube config
+      run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+    - name: Deploy to EKS
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}        
+        IMAGE_TAG: ${{ steps.commit.outputs.short }}
+      run: |
+        kubectl apply -f ../../eks/01_aws_test.yaml
+        kubectl apply -f ../../eks/02_deployment.yaml
+        kubectl apply -f ../../eks/03_public_ib.yaml
+        kubectl apply -f ../../eks/04_private.yaml
+        kubectl apply -f ../../eks/05_cluster_autoscaler.yaml
+

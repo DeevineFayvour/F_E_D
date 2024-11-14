@@ -21,3 +21,19 @@ override.tf.json
 
 # Ignore lock file
 .terraform.lock.hcl
+
+# Dependency directories
+node_modules/
+
+# Logs
+logs
+*.log
+
+# Environment variables
+.env
+
+# OS-specific files
+.DS_Store
+
+
+
