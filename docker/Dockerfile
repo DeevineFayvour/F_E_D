@@ -1,12 +1,13 @@
 FROM node:12.17.0
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY ../src/package*.json ./
 
 RUN npm install
 
-COPY . .
+
+COPY ../src/ .
 
 ENV PORT=3000
 
